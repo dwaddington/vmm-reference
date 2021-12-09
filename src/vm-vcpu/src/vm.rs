@@ -5,13 +5,16 @@
 use std::io::{self, ErrorKind};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
+use core::intrinsics::breakpoint;
 use kvm_bindings::kvm_userspace_memory_region;
 #[cfg(target_arch = "x86_64")]
 use kvm_bindings::{kvm_pit_config, KVM_PIT_SPEAKER_DUMMY};
 
 use kvm_ioctls::{Kvm, VmFd};
 use vm_device::device_manager::IoManager;
+use vm_memory::bitmap::Bitmap;
 use vm_memory::{Address, GuestAddress, GuestMemory, GuestMemoryRegion};
 use vmm_sys_util::errno::Error as Errno;
 use vmm_sys_util::eventfd::EventFd;
@@ -136,6 +139,7 @@ impl<EH: 'static + ExitHandler + Send> KvmVm<EH> {
 
         vm.configure_memory_regions(guest_memory, kvm)?;
 
+
         #[cfg(target_arch = "x86_64")]
         MpTable::new(vm.state.num_vcpus)?.write(guest_memory)?;
 
@@ -165,9 +169,11 @@ impl<EH: 'static + ExitHandler + Send> KvmVm<EH> {
                 memory_size: region.len() as u64,
                 // It's safe to unwrap because the guest address is valid.
                 userspace_addr: guest_memory.get_host_address(region.start_addr()).unwrap() as u64,
-                flags: 0,
+                flags: kvm_bindings::KVM_MEM_LOG_DIRTY_PAGES,
             };
 
+            println!("MEMORY REGION: slot={} size={}", &memory_region.slot, &memory_region.memory_size);
+//            unsafe { breakpoint(); }
             // Safe because:
             // * userspace_addr is a valid address for a memory region, obtained by calling
             //   get_host_address() on a valid region's start address;
@@ -178,6 +184,21 @@ impl<EH: 'static + ExitHandler + Send> KvmVm<EH> {
         }
 
         Ok(())
+    }
+
+    pub fn collect_dirty_map_info(&self, slot: u32, memory_size: usize) {
+
+        let start = Instant::now();
+            
+        let dirty_pages_bitmap = self.fd.get_dirty_log(slot, memory_size).unwrap();
+        
+        let dirty_pages = dirty_pages_bitmap
+            .into_iter()
+            .map(|page| page.count_ones())
+            .fold(0, |dirty_page_count, i| dirty_page_count + i);
+
+        let duration = start.elapsed();
+        println!("Dirty pages: {} {:?}", dirty_pages, duration);
     }
 
     // Configures the in kernel interrupt controller.

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 //! Reference VMM built with rust-vmm components and minimal glue.
 #![deny(missing_docs)]
+#![feature(core_intrinsics)]
 
 use std::convert::TryFrom;
 #[cfg(target_arch = "aarch64")]
@@ -12,6 +13,8 @@ use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::intrinsics::breakpoint;
+use std::thread::spawn;
 
 use event_manager::{EventManager, EventOps, Events, MutEventSubscriber, SubscriberOps};
 use kvm_bindings::KVM_API_VERSION;
@@ -321,18 +324,40 @@ impl Vmm {
         }
 
         self.vm.run(kernel_load_addr).map_err(Error::Vm)?;
-        loop {
-            match self.event_mgr.run() {
-                Ok(_) => (),
-                Err(e) => eprintln!("Failed to handle events: {:?}", e),
-            }
-            if !self.exit_handler.keep_running() {
-                break;
-            }
-        }
-        self.vm.shutdown();
-
+        
         Ok(())
+    }
+
+    /// Process events 
+    pub fn process_events(& mut self) -> i32 {
+        match self.event_mgr.run() {
+            Ok(_) => (),
+            Err(e) => eprintln!("Failed to handle events: {:?}", e),
+        }
+
+        
+        if !self.exit_handler.keep_running() {
+            return 1;
+        }
+                            
+        0
+    }
+
+    /// Shutdown the VM
+    pub fn shutdown(& mut self) {
+        self.vm.shutdown();
+    }
+
+    /// Display dirty pages bitmap
+    pub fn async_collect_dirty(&self) {
+        assert!(self.guest_memory.num_regions() == 2);
+        let mut region_id = 0;
+        println!("--");
+        for r in self.guest_memory.iter() {
+            self.vm.collect_dirty_map_info(region_id,r.size());
+            region_id += 1;
+        }
+        println!("--");
     }
 
     // Create guest memory regions.
