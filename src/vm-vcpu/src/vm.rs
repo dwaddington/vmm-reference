@@ -2,6 +2,7 @@
 // Copyright 2017 The Chromium OS Authors. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 
+use std::fs::{File};
 use std::io::{self, ErrorKind};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread::{self, JoinHandle};
@@ -14,7 +15,7 @@ use kvm_bindings::{kvm_pit_config, KVM_PIT_SPEAKER_DUMMY};
 
 use kvm_ioctls::{Kvm, VmFd};
 use vm_device::device_manager::IoManager;
-use vm_memory::bitmap::Bitmap;
+
 use vm_memory::{Address, GuestAddress, GuestMemory, GuestMemoryRegion};
 use vmm_sys_util::errno::Error as Errno;
 use vmm_sys_util::eventfd::EventFd;
@@ -25,6 +26,7 @@ use crate::vcpu::{self, KvmVcpu, VcpuRunState, VcpuState};
 use vm_vcpu_ref::aarch64::interrupts::{self, Gic, GicConfig};
 #[cfg(target_arch = "x86_64")]
 use vm_vcpu_ref::x86_64::mptable::{self, MpTable};
+
 
 /// Defines the state from which a `KvmVm` is initialized.
 pub struct VmState {
@@ -186,8 +188,8 @@ impl<EH: 'static + ExitHandler + Send> KvmVm<EH> {
         Ok(())
     }
 
-    pub fn collect_dirty_map_info(&self, slot: u32, memory_size: usize) {
-
+    pub fn collect_dirty_map_info(&self, slot: u32, memory_size: usize) -> String {
+        
         let start = Instant::now();
             
         let dirty_pages_bitmap = self.fd.get_dirty_log(slot, memory_size).unwrap();
@@ -199,6 +201,7 @@ impl<EH: 'static + ExitHandler + Send> KvmVm<EH> {
 
         let duration = start.elapsed();
         println!("Dirty pages: {} {:?}", dirty_pages, duration);
+        format!("Dirty pages: {} {:?}\n", dirty_pages, duration)
     }
 
     // Configures the in kernel interrupt controller.

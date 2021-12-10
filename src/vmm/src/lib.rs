@@ -7,8 +7,8 @@
 use std::convert::TryFrom;
 #[cfg(target_arch = "aarch64")]
 use std::convert::TryInto;
-use std::fs::File;
-use std::io::{self, stdin, stdout};
+use std::fs::{File, OpenOptions};
+use std::io::{self, stdin, stdout, Write};
 use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -350,14 +350,24 @@ impl Vmm {
 
     /// Display dirty pages bitmap
     pub fn async_collect_dirty(&self) {
+        
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)            
+            .open("dirty-collect.log")
+            .unwrap();
+
         assert!(self.guest_memory.num_regions() == 2);
         let mut region_id = 0;
         println!("--");
+        write!(file, "--\n");
         for r in self.guest_memory.iter() {
-            self.vm.collect_dirty_map_info(region_id,r.size());
+            let s = self.vm.collect_dirty_map_info(region_id,r.size());
+            write!(file, "{}", s);
             region_id += 1;
         }
-        println!("--");
+        write!(file, "--\n");
     }
 
     // Create guest memory regions.

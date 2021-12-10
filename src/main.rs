@@ -6,7 +6,7 @@ use std::fs;
 use api::Cli;
 use vmm::Vmm;
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixStream,UnixListener};
 use std::thread;
 
